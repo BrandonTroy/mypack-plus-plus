@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "MyPack++",
+  "version": "0.1.0",
+  "description": "A browser extension to improve the functionality and user experience of the NCSU MyPack Portal.",
+  "permissions": ["storage", "scripting"],
+  "host_permissions": ["https://portalsp.acs.ncsu.edu/*"],
+
+  "background": {
+    "service_worker": "src/background/worker.ts",
+    "type": "module"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["https://portalsp.acs.ncsu.edu/*"],
+      "js": ["src/content/mount.tsx"]
+    }
+  ]
+}
