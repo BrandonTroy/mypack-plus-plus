@@ -6,10 +6,16 @@ export class GlobalMutationObserver {
   private observedDocs = new Set<Document>();
   private callback: MutationCallback;
   private options: MutationObserverInit;
+  private onDocumentDiscovered?: (doc: Document) => void;
 
-  constructor(callback: MutationCallback) {
+  constructor(
+    callback: MutationCallback,
+    options?: MutationObserverInit & { onDocumentDiscovered?: (doc: Document) => void },
+  ) {
     this.callback = callback;
-    this.options = { childList: true, subtree: true };
+    const { onDocumentDiscovered, ...mutationOptions } = options ?? {};
+    this.options = { childList: true, subtree: true, ...mutationOptions };
+    this.onDocumentDiscovered = onDocumentDiscovered;
   }
 
   /**
@@ -21,9 +27,13 @@ export class GlobalMutationObserver {
     }
 
     const doc = target.ownerDocument || (target as Document);
-    
+
     if (!this.observedDocs.has(doc)) {
       this.observedDocs.add(doc);
+
+      // Notify about the discovered document
+      this.onDocumentDiscovered?.(doc);
+
       const observer = new MutationObserver(this.callback);
       observer.observe(target, this.options);
       this.observers.push(observer);
@@ -44,14 +54,17 @@ export class GlobalMutationObserver {
    * Observe any iframes in the document
    */
   private observeIframes(doc: Document): void {
-    const iframes = doc.querySelectorAll('iframe');
-    
+    const iframes = doc.querySelectorAll("iframe");
+
     iframes.forEach((iframe) => {
       const iframeDoc = iframe.contentDocument;
-      
+
       if (iframeDoc?.body && !this.observedDocs.has(iframeDoc)) {
         this.observedDocs.add(iframeDoc);
-        
+
+        // Notify about the discovered iframe document
+        this.onDocumentDiscovered?.(iframeDoc);
+
         const iframeObserver = new MutationObserver(this.callback);
         iframeObserver.observe(iframeDoc.body, this.options);
         this.observers.push(iframeObserver);
