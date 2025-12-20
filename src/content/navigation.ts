@@ -67,7 +67,7 @@ export default function NavigationHandler() {
     let stackIndex = 0;
 
     // Recursively traverse navigation elements and attach listeners
-    const detectElements = async (elements: NavElement[], level: number) => {
+    const detectElements = async (elements: NavElement[], path: NavElement[] = []) => {
       for (const element of elements) {
         if (globalQuerySelectorAll(element.selector).length > 0) {
           await new Promise((resolve) => setTimeout(resolve, 100));
@@ -92,17 +92,22 @@ export default function NavigationHandler() {
             trackedElements.current.add(element.selector);
             elems.forEach((elem, index) => {
               elem.addEventListener("click", () => {
-                setNavigationStack((prev) => [
-                  ...prev.slice(0, level),
-                  { selector: element.selector, index },
-                ]);
+                setNavigationStack((prev) => {
+                  const newStack = prev.slice(0, path.length);
+                  // Fill missing levels from path
+                  for (let i = newStack.length; i < path.length; i++) {
+                    newStack.push({ selector: path[i].selector, index: 0 });
+                  }
+                  newStack.push({ selector: element.selector, index });
+                  return newStack;
+                });
               });
             });
           }
 
           // Check children if the parent exists
           if (element.children) {
-            await detectElements(element.children, level + 1);
+            await detectElements(element.children, [...path, element]);
           }
         }
       }
@@ -144,7 +149,7 @@ export default function NavigationHandler() {
     };
 
     // Observe mutations globally to detect navigation elements dynamically
-    const handleMutation = () => detectElements(ELEMENTS, 0);
+    const handleMutation = () => detectElements(ELEMENTS);
 
     const observer = new GlobalMutationObserver(handleMutation, {
       onDocumentDiscovered: (doc) => {
