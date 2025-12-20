@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "css-what": "^7.0.0",
     "preact": "^10.27.2"
   },
   "devDependencies": {

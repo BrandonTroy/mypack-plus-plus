@@ -1,3 +1,5 @@
+import { isTraversal, parse, stringify, type TagSelector } from "css-what";
+
 /**
  * A MutationObserver that observes both the main document and any child iframes
  */
@@ -10,7 +12,9 @@ export class GlobalMutationObserver {
 
   constructor(
     callback: MutationCallback,
-    options?: MutationObserverInit & { onDocumentDiscovered?: (doc: Document) => void },
+    options?: MutationObserverInit & {
+      onDocumentDiscovered?: (doc: Document) => void;
+    },
   ) {
     this.callback = callback;
     const { onDocumentDiscovered, ...mutationOptions } = options ?? {};
@@ -79,7 +83,9 @@ export class GlobalMutationObserver {
    * Stop observing all documents and iframes
    */
   disconnect(): void {
-    this.observers.forEach((observer) => observer.disconnect());
+    this.observers.forEach((observer) => {
+      observer.disconnect();
+    });
     this.observers = [];
     this.observedDocs.clear();
   }
@@ -94,50 +100,170 @@ export class GlobalMutationObserver {
 
 /**
  * Query selector that searches both the main document and any child iframes
+ * @param selector The CSS selector to query
+ * @param searchAllDocuments If true (default), returns the first match found in main
+ * document or any iframe. If false, iframe tags can be included in the selector
+ * and the search will be limited to valid document contexts only. For example,
+ * "iframe iframe div" will search for a div inside of any iframes that are themselves
+ * inside of an iframe.
  */
 export function globalQuerySelector<E extends Element = Element>(
-  selector: string
+  selector: string,
+  searchAllDocuments: boolean = true,
 ): E | null {
-  // Try main document first
-  const mainResult = document.querySelector<E>(selector);
-  if (mainResult) {
-    return mainResult;
+  return globalQuerySelectorInternal<E>(
+    document,
+    selector,
+    searchAllDocuments,
+    false,
+  ) as E | null;
+}
+
+/**
+ * Query selector that all searches both the main document and any child iframes
+ * @param selector The CSS selector to query
+ * @param searchAllDocuments If true (default), returns all matches found in main
+ * document or any iframe. If false, iframe tags can be included in the selector
+ * and the search will be limited to valid document contexts only. For example,
+ * "iframe iframe div" will search for divs inside of any iframes that are themselves
+ * inside of an iframe.
+ */
+export function globalQuerySelectorAll<E extends Element = Element>(
+  selector: string,
+  searchAllDocuments: boolean = true,
+): E[] {
+  return globalQuerySelectorInternal<E>(
+    document,
+    selector,
+    searchAllDocuments,
+    true,
+  ) as E[];
+}
+
+function globalQuerySelectorInternal<E extends Element = Element>(
+  document: Document,
+  selector: string,
+  searchAllDocuments: boolean,
+  all: boolean,
+): (E | null) | E[] {
+  const allResult: E[] = [];
+
+  // Search all documents via DFS
+  if (searchAllDocuments) {
+    const documents: Document[] = [document];
+
+    while (documents.length > 0) {
+      const doc = documents.pop() as Document;
+      // Query the document using the internal method to handle iframes in selector
+      if (all) {
+        allResult.push(
+          ...(globalQuerySelectorInternal<E>(
+            doc,
+            selector,
+            false,
+            true,
+          ) as E[]),
+        );
+      } else {
+        const match = globalQuerySelectorInternal<E>(
+          doc,
+          selector,
+          false,
+          false,
+        ) as E | null;
+        if (match) return match;
+      }
+
+      documents.push(
+        ...Array.from(doc.querySelectorAll("iframe"))
+          .map((iframe) => iframe.contentDocument)
+          .filter((iframeDoc) => iframeDoc !== null),
+      );
+    }
+    return all ? allResult : null;
   }
 
-  // Try iframes
-  for (const iframe of document.querySelectorAll('iframe')) {
-    const iframeDoc = iframe.contentDocument;
-    if (iframeDoc) {
-      const iframeResult = iframeDoc.querySelector<E>(selector);
-      if (iframeResult) {
-        return iframeResult;
+  // Parse selector into segments for iframe-aware querying
+  const ast = parse(selector);
+  for (const segment of ast) {
+    let segmentDocuments = [document];
+    let lastTagIsIframe = false;
+    let start = 0;
+
+    for (let i = 0; i < segment.length - 1; i++) {
+      if (
+        segment[i].type === "tag" &&
+        (segment[i] as TagSelector).name === "iframe"
+      ) {
+        lastTagIsIframe = true;
+      }
+
+      if (
+        lastTagIsIframe &&
+        ["child", "descendant"].includes(segment[i].type)
+      ) {
+        const iframeSelector = stringify([segment.slice(start, i)]);
+        start = i + 1;
+
+        // Update segmentDocuments with the next level of valid iframe documents
+        segmentDocuments = segmentDocuments.flatMap((doc) =>
+          Array.from(doc.querySelectorAll<HTMLIFrameElement>(iframeSelector))
+            .map((iframe) => iframe.contentDocument)
+            .filter((iframeDoc) => iframeDoc !== null),
+        );
+      }
+
+      if (isTraversal(segment[i])) {
+        lastTagIsIframe = false;
+      }
+    }
+
+    // Query the remaining selector segment within the valid documents
+    const selector = stringify([segment.slice(start)]);
+
+    for (const doc of segmentDocuments) {
+      if (all) {
+        allResult.push(...doc.querySelectorAll<E>(selector));
+      } else {
+        const match = doc.querySelector<E>(selector);
+        if (match) return match;
       }
     }
   }
 
-  return null;
+  return all ? allResult : null;
 }
 
 /**
- * Query selector all that searches both the main document and any child iframes
+ * Generate a unique selector for an element that works with globalQuerySelector.
+ * Uses structural path with tag names and nth-of-type for stability across loads.
  */
-export function globalQuerySelectorAll<E extends Element = Element>(
-  selector: string
-): E[] {
-  const results: E[] = [];
+export function getGlobalSelector(element: Element): string {
+  // Build a minimal path upwards until we have a unique selector
+  const path: string[] = [];
+  let current: Element = element;
+  const doc = element.ownerDocument;
 
-  // Get from main document
-  const mainResults = document.querySelectorAll<E>(selector);
-  results.push(...Array.from(mainResults));
+  do {
+    let selector = current.tagName.toLowerCase();
 
-  // Get from iframes
-  for (const iframe of document.querySelectorAll('iframe')) {
-    const iframeDoc = iframe.contentDocument;
-    if (iframeDoc) {
-      const iframeResults = iframeDoc.querySelectorAll<E>(selector);
-      results.push(...Array.from(iframeResults));
+    // Add nth-of-type if there are siblings with the same tag
+    const parent = current.parentElement as Element;
+    const siblings = Array.from(parent?.children ?? []).filter(
+      (el) => el.tagName === current.tagName,
+    );
+
+    if (siblings.length > 1) {
+      const index = siblings.indexOf(current) + 1;
+      selector += `:nth-of-type(${index})`;
     }
-  }
 
-  return results;
+    path.unshift(selector);
+    current = parent;
+  } while (doc.querySelector(path.join(" > ")) !== element);
+
+  // If element is inside an iframe, prepend the iframe's selector
+  const iframe = doc.defaultView?.frameElement;
+  const prefix = iframe ? `${getGlobalSelector(iframe)} ` : "";
+  return prefix + path.join(" > ");
 }
