@@ -267,3 +267,22 @@ export function getGlobalSelector(element: Element): string {
   const prefix = iframe ? `${getGlobalSelector(iframe)} ` : "";
   return prefix + path.join(" > ");
 }
+
+/**
+ * Type guard to check if a node is a Document
+ */
+function isDocument(node: object | null): node is Document {
+  if (node && "nodeType" in node) {
+    return node.nodeType === Node.DOCUMENT_NODE;
+  }
+  return false;
+}
+
+/**
+ * Get the target element from an event target, handling elements and documents across iframes
+ */
+export function getTargetElement(target: EventTarget | null): Element | null {
+  return isDocument(target)
+    ? target.documentElement
+    : (target as Element | null);
+}
