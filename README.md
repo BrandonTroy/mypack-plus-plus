@@ -50,9 +50,9 @@ Before you begin, ensure you have the following installed:
    - Click "Load unpacked" and select the `dist/` folder
 
 1. **Start developing!**
-   - The extension will automatically reload in the browser as the source files are modified
-   - **Important**: Refresh the MyPack Portal page to see your changes take effect
-   - Note: When starting the dev server in future sessions, you may need to manually click the reload button in the extensions page once
+   - The extension should automatically reload in the browser as the source files are modified
+   - Depending on your browser, you might have to manually refresh the page to see your changes take effect
+   - When starting the dev server in future sessions, you may need to manually click the reload button in the extensions page once
 
 1. **Build for production**
    ```bash
@@ -62,4 +62,4 @@ Before you begin, ensure you have the following installed:
 
 ## 🤝 Contributing
 
-Contributions, feature requests, and bug reports are welcome! Please use [Conventional Commits](https://gist.github.com/qoomon/5dfcdf8eec66a051ecd85625518cfd13) for your commit messages.
+Contributions, feature requests, and bug reports are welcome! Feel free to open issues and submit pull requests. Please run the linter with `npm run lint:fix` prior to committing, and use [Conventional Commits](https://gist.github.com/qoomon/5dfcdf8eec66a051ecd85625518cfd13) for consistency.
